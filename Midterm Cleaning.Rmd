@@ -1,0 +1,329 @@
+---
+title: "Midterm Project Cleaning"
+author: "Xu Luo"
+date: "2022-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data cleaning from Haviland
+```{r}
+## The purpose of this R script is to get you started on the
+## midterm project. 
+
+library(tidyverse)
+library(magrittr)
+library(readxl)
+
+
+## Start by reading the data
+strawb <- read_xlsx("strawberries-2022oct30-a.xlsx", col_names = T)
+
+## Get the column names and index them
+cnames <- colnames(strawb)
+
+x <- 1:dim(strawb)[2]
+
+## Explore data by viewing it in R.  
+## Double click the strawb data frame to launch the view() function.
+## The data frame has 1008 rows, so you can't get very far by
+## simply scrolling around.  But, you can generate some initial
+## questions to help you explore using R functions from the
+## tidyverse.  
+##
+## It looks like some of the columns may be blank or may contain 
+## a single unique value.  These columns can be eliminated without 
+## losing any information.
+
+## Start by examining the content of the columns
+
+## Column 1 contains two unique values.  
+## Retain column 1 -- those values might be needed.
+unique(strawb[1])
+
+## Column 2 -- contains the years included in this dataset.
+## Keep column 2, of course.
+unique(strawb[2])
+
+## Column 3 -- contains the time periods covered by in the dataset.
+## There's only one -- years.  No info here.  Drop it
+unique(strawb[3])
+
+## you don't have to do this one column at a time.
+## Note that the cells of columns that are empty contain NA, so
+## the number of unique values in these columns is 1, just 
+## like column_3.
+
+## Set T as an indicator
+T <- NULL
+
+## Collect number of unique rows in each column
+for(i in x){T <- c(T, dim(unique(strawb[i]))[1])}
+
+## Use T to select columns to drop -- 
+drop_cols <- cnames[which(T == 1)]
+
+## Now, drop the columns with only one unique value.
+strawb %<>% select(!all_of(drop_cols))
+
+## Let's arrange the data frame by year and state.
+strawb %<>% arrange(Year, State)
+
+## Look at the strawb data frame again. You can see that the 
+## columns need work. The State ANSI column contains a unique
+## code for each state. If you need to access US Census data for
+## the states, this code will come in handy.
+
+colnames(strawb)
+
+## now look at the `Data Item` column
+
+temp1 <- strawb %>% select(`Data Item`) %>% 
+         distinct()
+
+## Look at temp1!  There's a lot going on there.
+## In fact, it's at least three columns packed into one.
+## Use separate() to split it up
+
+## When you run this code you can see that there are 
+## some rows where `Data Item` has 4 comma-separated 
+## data items.  Look at the warning on the Console 
+## after 
+
+strawb2 <- strawb %>% separate(col=`Data Item`,
+                into = c("Strawberries", "items", "units"),
+                sep = ",",
+                fill = "right")
+
+
+## try 4 columns
+
+strawb3 <- strawb %>% separate(col=`Data Item`,
+            into = c("Strawberries", "type", "items", "units"),
+                               sep = ",",
+                               fill = "right")
+
+## That worked. Clean up the dat.
+
+rm(strawb2, strawb3)
+
+strawb %<>% separate(col=`Data Item`,
+                    into = c("Strawberries", "type", "items", "units"),
+                    sep = ",",
+                    fill = "right")
+
+## now explore the new columns
+
+## we know that "THIRAM" is a chemical in the data, so
+## test for it to check out the way code
+r_thiram <- grep("THIRAM", strawb$`Domain Category`)
+r_thiram_1 <- grep("Thiram", 
+                   strawb$`Domain Category`, 
+                   ignore.case = T)
+
+## Chemicals mentioned in 
+## the "Shoppers Guide to Pesticides in Produce"
+## Carbendazim, Bifenthrin, methyl bromide, 1,3-dichloropropene,
+## chloropicrin, Telone
+
+## Found 0
+df_carbendazim <- grep("carbendazim", 
+                       strawb$`Domain Category`, ignore.case = T)
+
+## Bifenthrin found 27
+df_Bifenthrin <- grep("Bifenthrin", 
+                       strawb$`Domain Category`, ignore.case = T)
+
+## methyl bromide found 3
+df_methyl_bromide <- grep("methyl bromide", 
+                      strawb$`Domain Category`, ignore.case = T)
+
+## 1,3-dichloropropene empty
+df_1_3_dichloropropene <- grep("1,3-dichloropropene", 
+                          strawb$`Domain Category`, 
+                          ignore.case = T)
+
+## chloropicrin found 18
+df_chloropicrin <- grep("chloropicrin", 
+                               strawb$`Domain Category`, 
+                               ignore.case = T)
+
+## Telone empty
+df_Telone <- grep("Telone", 
+                        strawb$`Domain Category`, 
+                        ignore.case = T)
+
+```
+
+## Gradescope Questions
+```{r}
+##1 Convert CWT to lbs
+# 1 CWT = 100 lbs in America, 
+# 285 CWT = 285*100 = 28500 lb
+```
+
+```{r}
+##2 Compute a 95% confidence interval for California organic strawberry sales in 2016.
+# Filter the organic strawberry in Cali in 2016
+cali <- strawb %>% filter(Year == 2016, State == "CALIFORNIA", Domain == "ORGANIC STATUS" )
+
+#Calculate the Confidence Interval
+# CV = coefficients of variation
+# CV = sd/mean
+mean <- cali$Value[1]
+#sd = CV*mean
+sd <- 0.137*as.numeric(mean)
+# SINCE the unit of this row is also NA, there are no sample size n.
+# So sd = standard error(se)
+
+# 95% CI = (mean +/- 1.96*sd)
+lower.bound = as.numeric(mean) - 1.96 * sd
+upper.bound = as.numeric(mean) + 1.96 * sd
+CI <- c(lower.bound, upper.bound)
+CI
+```
+```{r}
+##3 Compute a 95% confidence interval for California non-organic strawberry sales in 2016.
+# Filter the non-organic strawberry in Cali in 2016
+cali_non <- strawb %>% filter(Year == 2016, State == "CALIFORNIA", Domain != "ORGANIC STATUS")
+sum(is.na(cali_non[13]))
+# Since the CV of California non-organic strawberry are NA. 
+# We could not calculate the Confidence Interval
+NA
+```
+```{r}
+##4 In the data set for the MA615 Strawberry project, 
+## how many different chemicals are listed?
+
+chemicals <- strawb %>% filter(Domain != "ORGANIC STATUS" & Domain != "TOTAL") %>% 
+             unique()
+
+chemi_num <- chemicals %>% select(`Domain Category`) %>%
+         unique()
+nrow(chemi_num)
+```
+```{r}
+##5
+##On the basis of the data set for the MA615 Strawberry project, 
+##how many more chemicals have been used in California than in Florida?
+# Filter the data that using chemicals in these 2 states:
+cali_all_chemi <- strawb %>% filter(State == "CALIFORNIA", Domain != "ORGANIC STATUS" & 
+                                      Domain != "TOTAL" )
+flori_all_chemi <- strawb %>% filter(State == "FLORIDA", Domain != "ORGANIC STATUS" & 
+                                       Domain != "TOTAL" )
+
+#calculate the number of chemicals used in Cali
+cali_chemi_num <- cali_all_chemi  %>% select(`Domain Category`) %>%
+                  unique()
+nrow(cali_chemi_num)
+
+#calculate the number of chemicals used in Florida
+flori_chemi_num <- flori_all_chemi  %>% select(`Domain Category`) %>%
+                   unique()
+nrow(flori_chemi_num)
+
+# more chemicals:
+more <- nrow(cali_chemi_num) - nrow(flori_chemi_num)
+more
+```
+
+
+## Data Cleaning for the EDA project, using my own methods
+```{r}
+## First few steps are the same as Hav's
+## Read the origin data set and name it as strawb_raw
+strawb_raw <- read_xlsx("strawberries-2022oct30-a.xlsx")
+
+## Same as Hav's method, I remove the columns that contain NA or
+## a single unique value.
+## Set W as an indicator
+W <- NULL
+
+## Collect number of unique rows in each column
+for(i in x){
+  W <- c(W, dim(unique(strawb_raw[i]))[1])
+  }
+
+## Use W to select columns to drop -- 
+drop_cols <- cnames[which(W == 1)]
+
+## Now, drop the columns with only one unique value.
+strawb_raw %<>% select(!all_of(drop_cols))
+
+## Let's arrange the data frame by year and state.
+strawb_raw %<>% arrange(Year, State)
+
+## now look at the `Data Item` column
+test1 <- strawb_raw %>% select(`Data Item`) %>% 
+  distinct()
+
+```
+
+
+```{r}
+## try to split the `Data Item` in a cleaner way
+## split with "-" sign first
+strawb_raw2 <- strawb_raw %>% separate(col=`Data Item`,
+                               into = c("Strawberries&Conditions", "Sales_Status&Measurement"),
+                               sep = "-",
+                               fill = "right")
+
+## split the Strawberries&Conditions with ","
+strawb_raw3 <- strawb_raw2 %>% separate(col=`Strawberries&Conditions`,
+                                       into = c("Strawberries", "Type","Market_Conditions"),
+                                       sep = ",",
+                                       fill = "right")
+
+## split the Sales_Status&Measurement with ","
+strawb_raw4 <- strawb_raw3 %>% separate(col=`Sales_Status&Measurement`,
+                                        into = c("Sales_Status", "Measurement","AVG"),
+                                        sep = ",",
+                                        fill = "right")
+
+## renew the strawb_raw data
+strawb_raw <- strawb_raw4
+
+## Now the `Data Item` has been divided into 6 columns 
+## "Strawberries", "Type","Market_Conditions"
+## "Sales_Status", "Measurement","AVG"
+```
+
+
+```{r}
+## try to split the `Domain Category` in a more clean way:
+## split with ":" sign
+strawb_raw_domain <- strawb_raw %>% separate(col=`Domain Category`,
+                                       into = c("Domain_Specific", "Chemical_Names"),
+                                       sep = ":",
+                                       fill = "right")
+
+## Compare the "Domain" and "Domain Category"
+t1 <- strawb_raw_domain %>% select(`Domain`) %>%
+  unique()
+t1
+t2 <- strawb_raw_domain %>% select(`Domain_Specific`) %>%
+  unique()
+t2
+
+
+## The elements in these two column are the same 
+## so I deleted the "Domain_Specific" column
+strawb_raw_domain <- strawb_raw_domain[, -13]
+
+```
+
+## Conclusion of Data cleaning
+```{r}
+## renew the strawb_raw data
+strawb_raw <- strawb_raw_domain
+View(strawb_raw)
+
+
+## Now we finish data cleaning and get a clean data set called "strawb_raw"
+```
+
+
+
