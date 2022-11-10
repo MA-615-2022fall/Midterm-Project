@@ -1,0 +1,301 @@
+---
+title: "EDA Group Project"
+author: "Xu Luo, Hui Xiong, Ruiyi Feng, Lanlin Zhao, Priam Vyas"
+date: "2022-11-09"
+output:
+  pdf_document: 
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Load the package & Read the data set
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(readxl)
+library(ggplot2)
+strawb <- read_xlsx("strawberries-2022oct30-a.xlsx")
+```
+
+## Data cleaning 
+```{r}
+## Get the column names and index them
+cnames <- colnames(strawb)
+x <- 1:dim(strawb)[2]
+
+## Eliminate columns that are blank or may contain 
+## a single unique value.
+## Set T as an indicator
+T <- NULL
+
+## Collect number of unique rows in each column
+for(i in x){T <- c(T, dim(unique(strawb[i]))[1])}
+
+## Use T to select columns to drop -- 
+drop_cols <- cnames[which(T == 1)]
+
+## Drop the columns with only one unique value.
+strawb %<>% select(!all_of(drop_cols))
+
+## Arrange the data frame by year and state.
+strawb %<>% arrange(Year, State)
+
+```
+
+
+```{r}
+## ## try to split the `Data Item` in a cleaner way
+## split with "-" sign first
+strawb2 <- strawb %>% separate(col=`Data Item`,
+                               into = c("Strawberries&Conditions", "Sales_Status&Measurement"),
+                               sep = "-",
+                               fill = "right")
+
+## split the Strawberries&Conditions with ","
+strawb3 <- strawb2 %>% separate(col=`Strawberries&Conditions`,
+                                       into = c("Strawberries", "Type","Market_Conditions"),
+                                       sep = ",",
+                                       fill = "right")
+
+## split the Sales_Status&Measurement with ","
+strawb4 <- strawb3 %>% separate(col=`Sales_Status&Measurement`,
+                                        into = c("Sales_Status", "Measurement","AVG"),
+                                        sep = ",",
+                                        fill = "right")
+
+## renew the strawb data
+strawb <- strawb4
+
+## Now the `Data Item` has been divided into 6 columns 
+## "Strawberries", "Type","Market_Conditions"
+## "Sales_Status", "Measurement","AVG"
+```
+
+```{r}
+## try to split the `Domain Category` in a more clean way:
+## split with ":" sign
+strawb_domain <- strawb %>% separate(col=`Domain Category`,
+                                       into = c("Domain_Specific", "Chemical_Names"),
+                                       sep = ":",
+                                       fill = "right")
+
+## Compare the "Domain" and "Domain Category"
+t1 <- strawb_domain %>% select(`Domain`) %>%
+  unique()
+t1
+t2 <- strawb_domain %>% select(`Domain_Specific`) %>%
+  unique()
+t2
+
+
+## The elements in these two column are the same 
+## so I deleted the "Domain_Specific" column
+strawb_domain <- strawb_domain[, -13]
+
+```
+## Finish Data cleaning
+```{r}
+## renew the strawb data
+strawb <- strawb_domain
+
+## Now we finish data cleaning and get a clean data set called "strawb_raw".
+```
+
+## EDA 
+```{r}
+## Sum of All Organic Sales measure in $
+# Filter the Organic Product that measured in $
+Organic <- strawb %>% filter(Domain == "ORGANIC STATUS", Measurement == " MEASURED IN $")
+
+# By Observations, we found that, for each state in each year,the Value in 
+# the first row equals to the sum of the value in the second and third rows:
+# Total Value(for each state in each year) = Value(Market_conditions=Fresh Market) +
+# Value(Market_conditions=Processing)
+
+# So we filter the rows that have Total Value
+Organic_Sum1 <- Organic[is.na(Organic$Market_Conditions),]
+
+# Remove the "(D)", since New Jersey in 2019 didn't disclose their total
+Organic_Sum2 <- Organic_Sum1 %>% filter(Value != "(D)")
+
+# Calculate the sum
+sales_sum <- sum(as.numeric(Organic_Sum2$Value))
+sales_sum
+```
+- The total value of organic strawberries sold is 553,894,440 dollars.
+
+
+```{r}
+## Sum of All Organic Sales measure in CWT
+# Filter the Organic Product that measured in $
+Org_CWT <- strawb %>% filter(Domain == "ORGANIC STATUS", Measurement == " MEASURED IN CWT")
+
+# Same as the Value measured in $, for each state in each year,the Value in 
+# the first row equals to the sum of the value in the second and third rows
+
+# So we filter the rows that have Total Value
+CWT_Sum1 <- Org_CWT[is.na(Org_CWT$Market_Conditions),]
+
+# Calculate the sum
+cwt_sum <- sum(as.numeric(CWT_Sum1$Value))
+cwt_sum
+```
+- The total value of organic strawberries sold is 2,920,041 CWT.
+
+
+```{r}
+## Compare the sum organic sales of different states measured in $
+# Here, we use the Organic_Sum2 above, since it contain the total value in each state.
+# Calculate the sum of 2016 and 2019 for each state:
+Org_Sum3 <- Organic_Sum2 %>%
+  group_by(State) %>%
+  summarise(
+  Value_sum = sum(as.numeric(Value)),
+  )
+Org_Sum3
+
+options(scipen=200)
+# Visualize the sales:
+Sales_diff <- Org_Sum3 %>%
+  ggplot(aes(x = State, y = Value_sum))+
+  geom_col(fill= "blue")+
+  geom_text(aes(label=Value_sum), position = position_dodge(width = 0.9), vjust=-0.15)
+Sales_diff
+
+# For comparison, we try to visualize them with log value
+Sales_diff2 <- Org_Sum3 %>%
+  ggplot(aes(x = State, y = log(Value_sum)))+
+  geom_col()+
+  geom_text(aes(label=log(Value_sum)), position = position_dodge(width = 0.9), vjust=-0.15)
+Sales_diff2
+```
+- For the total sales of organic strawberries in different states, California has much more organic sales compared to other states as shown above and New Jersey has the least sales among the six states. The log values provide a clearer visualization due to the large difference among the six states. 
+
+
+```{r}
+## Compare the sum organic sales of different states measured in CWT.
+## Here, we use the CWT_Sum1 above.
+# Calculate the sum of 2016 and 2019 for each state:
+CWT_Sum2 <- CWT_Sum1 %>%
+  group_by(State) %>%
+  summarise(
+  Value_sum2 = sum(as.numeric(Value)),
+  )
+CWT_Sum2
+
+# Visualize the sales:
+CWT_diff <- CWT_Sum2 %>%
+  ggplot(aes(x = State, y = Value_sum2))+
+  geom_col(fill= "dark green")+
+  geom_text(aes(label=Value_sum2), position = position_dodge(width = 0.9), vjust=-0.15)
+CWT_diff
+
+# For comparison, we try to visualize them with log value
+CWT_diff2 <- CWT_Sum2 %>%
+  ggplot(aes(x = State, y = log(Value_sum2)))+
+  geom_col(fill= "dark grey")+
+  geom_text(aes(label=log(Value_sum2)), position = position_dodge(width = 0.9), vjust=-0.15)
+CWT_diff2
+
+```
+- The shape is identical because different measurements do not influence the relationship of quantity. However, values in the tibble and the plot change since these are measured by CWT rather than dollars.
+
+
+
+```{r}
+## Compare the use of different chemicals:
+# Filter the non-organic product:
+use_chemi <- strawb %>% filter(Domain != "ORGANIC STATUS", Domain != "TOTAL")
+use_chemi2 <- use_chemi %>% separate(col=`Domain`,
+                                       into = c("Chemi_or_not", "Chemi_types"),
+                                       sep = ",",
+                                       fill = "right")
+# Here the NA is Fertilizer, since it doesn't have right side part from "，”
+use_chemi2[is.na(use_chemi2)] <- "FERTILIZER"
+
+# Count the number of use of different chemicals.
+use_chemi2 %>%
+  group_by(Chemi_types) %>%
+  summarise(
+    count=n())
+
+# Visualize the Chemicals:
+chemi_diff <- use_chemi2 %>%
+  ggplot(aes(x = Chemi_types))+
+  geom_bar(fill= "SKYBlue")
+
+chemi_diff
+```
+- Using different chemicals can lead to different sales values. The non-organic strawberries have highest sales when insecticide is used and lowest sales when fertilizer is used. Using fungicide and insecticide do not lead to large difference but using these two chemicals have a more obvious positive influence on sales value compared to other chemicals.
+
+
+
+```{r}
+# Compare the sales of different chemicals measured in LB
+## Filter the sales measured in LB and remove the rows contain undefined values
+LB_chemi <- use_chemi2 %>% filter( Measurement == " MEASURED IN LB",
+                              Value != "(D)", Value != "(Z)", Value != "(NA)")
+
+# Calculate the sales value of different types of chemicals
+LB_Sum <- LB_chemi %>%
+  group_by(Chemi_types) %>%
+  summarise(
+  LB_Value = sum(as.numeric(Value)),
+  )
+LB_Sum
+
+# Visualize the difference:
+LB_diff <- LB_Sum %>%
+  ggplot(aes(x = Chemi_types, y = LB_Value))+
+  geom_col(fill= "dark green")+
+  geom_text(aes(label=LB_Value), position = position_dodge(width = 0.9), vjust=-0.15)
+LB_diff
+```
+- Among the four specific chemicals, the use of fertilizer (measured in LB) has the most obvious effect on sales values and the use of herbicide has the least. For the rest of the chemicals whose names are not mentioned in the plot, they have stronger effects compared to the other four. But since it is not individual, we can not make judgments about any of them.
+
+
+
+```{r}
+## Time series plot showing the change of Value measured by LB
+# Calculate the sales of all chemicals for each year
+Time_Sum <- LB_chemi %>%
+  group_by(Year) %>%
+  summarise(
+  LB_Value_T = sum(as.numeric(Value)),
+  )
+Time_Sum
+
+# Visualization
+T_diff <- Time_Sum %>%
+  ggplot(aes(x =Year, y = LB_Value_T))+
+  geom_line(color= "red")+
+  geom_text(aes(label=LB_Value_T), position = position_dodge(width = 0.9), vjust=-0.15)
+
+T_diff
+
+# As the plot shows, the use of chemicals brought a high increase in value from 2016 to 2018
+# Then the chemical's effect decreased.
+```
+```{r}
+## Compare the use of exact chemicals
+spec_chemi <- use_chemi2 %>%
+  group_by(Chemical_Names) %>%
+  summarise(
+    count=n())
+
+# Visualize the Chemicals:
+spec_diff <- spec_chemi %>%
+  ggplot(aes(x = Chemical_Names,y = count))+
+  geom_col(fill= "dark green")
+
+spec_diff
+	
+# Here, we can know (BIFENTHRIN = 128825) is being used most.
+```
+
